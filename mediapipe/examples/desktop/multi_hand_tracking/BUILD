@@ -40,3 +40,11 @@ cc_binary(
         "//mediapipe/graphs/hand_tracking:multi_hand_mobile_calculators",
     ],
 )
+
+cc_binary(
+    name = "multi_hand_tracking_go2d",
+    deps = [
+        "//mediapipe/examples/desktop:demo_run_graph_main_go2d",
+        "//mediapipe/graphs/hand_tracking:multi_hand_mobile_calculators",
+    ],
+)

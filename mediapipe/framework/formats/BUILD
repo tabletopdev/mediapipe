@@ -227,3 +227,16 @@ filegroup(
     srcs = glob(["*.proto"]),
     visibility = ["//mediapipe:__subpackages__"],
 )
+
+mediapipe_proto_library(
+    name = "wrapper_hand_tracking_proto",
+    srcs = ["wrapper_hand_tracking.proto"],
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+      "//mediapipe/framework/formats:landmark_proto",
+      "//mediapipe/framework/formats:detection_proto",
+      "//mediapipe/framework/formats:rect_proto",
+    ],
+)
