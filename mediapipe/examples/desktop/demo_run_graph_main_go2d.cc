@@ -34,6 +34,10 @@ constexpr char kInputStream[] = "input_video";
 constexpr char kOutputStream[] = "output_video";
 constexpr char kWindowName[] = "MediaPipe";
 
+const std::size_t INIT_BUFFER_SIZE = 1024;
+
+
+
 DEFINE_string(
     calculator_graph_config_file, "",
     "Name of file containing text format CalculatorGraphConfig proto.");
@@ -63,6 +67,43 @@ DEFINE_string(output_video_path, "",
   MP_RETURN_IF_ERROR(graph.SetGpuResources(std::move(gpu_resources)));
   mediapipe::GlCalculatorHelper gpu_helper;
   gpu_helper.InitializeForTest(graph.GetGpuResources().get());
+
+  try {
+      // on some systems you may need to reopen stdin in binary mode
+      std::freopen(nullptr, "rb", stdin);
+      if(std::ferror(stdin)) throw std::runtime_error(std::strerror(errno));
+
+      std::size_t len;
+      std::array<char, INIT_BUFFER_SIZE> buf;
+      std::vector<char> input;
+
+      // use std::fread and remember to only use as many bytes as are returned
+      // according to len
+      while (true) {
+        uint32_t length;
+        uint32_t stride;
+        uint32_t width;
+        std::fread(&length, sizeof(length), 1, stdin);
+        std::fread(&stride, sizeof(stride), 1, stdin);
+        std::fread(&width, sizeof(width), 1, stdin);
+        std::cout << length << " " << stride << " " << width << std::endl;
+
+        while((len = std::fread(buf.data(), sizeof(buf[0]), std::min(length - input.size(), buf.size()), stdin)) > 0) {
+            if(std::ferror(stdin) && !std::feof(stdin)) throw std::runtime_error(std::strerror(errno));
+            // use {buf.data(), buf.data() + len} here
+            input.insert(input.end(), buf.data(), buf.data() + len);
+        }
+
+        std::cout << input.size() << std::endl;
+        if (input.size() == 0) exit(0);
+        input.clear();
+      }
+  } catch(std::exception const& e) {
+      std::cerr << e.what() << '\n';
+      exit(-1);
+  }
+
+  exit(0);
 
   LOG(INFO) << "Initialize the camera or load the video.";
   cv::VideoCapture capture;

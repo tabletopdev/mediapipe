@@ -220,7 +220,7 @@ import "mediapipe/framework/formats/detection.proto";
 // }
 
 message WrapperHandTracking {
-    optional NormalizedLandmarkList landmarks = 1;
-    optional NormalizedRect rect = 2;
+    repeated NormalizedLandmarkList landmarks = 1;
+    repeated NormalizedRect rects = 2;
     optional DetectionList detection = 3;
 }
