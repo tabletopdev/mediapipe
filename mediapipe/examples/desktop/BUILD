@@ -95,3 +95,4 @@ cc_library(
         "//mediapipe/gpu:gpu_shared_data_internal",
     ],
 )
+

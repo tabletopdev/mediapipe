@@ -56,7 +56,7 @@ void setup_udp(){
 }
 
 
-class MyPassThroughCalculator : public CalculatorBase {
+class MyPassThroughCalculatorSingle : public CalculatorBase {
  public:
   static ::mediapipe::Status GetContract(CalculatorContract* cc) {
     for (CollectionItemId id = cc->Inputs().BeginId();
@@ -109,8 +109,8 @@ class MyPassThroughCalculator : public CalculatorBase {
         WrapperHandTracking* wrapper = new WrapperHandTracking();
         wrapper->InitAsDefaultInstance();
 
-        if (cc->Inputs().Get(id).Name() == "multi_hand_landmarks"){
-          const vector<NormalizedLandmarkList>& landmarks = cc->Inputs().Get(id).Get<vector<NormalizedLandmarkList>>();
+        if (cc->Inputs().Get(id).Name() == "hand_landmarks"){
+          const vector<NormalizedLandmarkList>& landmarks{cc->Inputs().Get(id).Get<NormalizedLandmarkList>()};
 
           for (int j = 0; j < landmarks.size(); ++j) {
             //std::cout << "Landmarks " << j << std::endl;
@@ -127,20 +127,21 @@ class MyPassThroughCalculator : public CalculatorBase {
           }
         }
 
-        if (cc->Inputs().Get(id).Name() == "multi_palm_detections") {
+        if (cc->Inputs().Get(id).Name() == "palm_detections") {
           // TODO I don't understand detections...
           // Palm is detected once, not continuously — when it first shows up in the image
-          const auto& detections = cc->Inputs().Get(id).Get<vector<Detection>>();
+          const vector<Detection>& detections = cc->Inputs().Get(id).Get<vector<Detection>>();
+
           for (int i = 0; i < detections.size(); ++i) {
               const Detection& detection = detections[i];
               //std::cout << "Detection  " << i << " " <<  detection.score()[0] << " " << detection.label()[0] << '\n';
-              // wrapper->mutable_detection()->add_detection();
-
+              wrapper->mutable_detection()->add_detection();
+              wrapper->mutable_detection()->mutable_detection(i)->add_score(detection.score()[0]);
           }
         }
 
-        if (cc->Inputs().Get(id).Name() == "multi_hand_rects") {
-          const vector<NormalizedRect>& rects = cc->Inputs().Get(id).Get<vector<NormalizedRect>>();
+        if (cc->Inputs().Get(id).Name() == "hand_rect") {
+          const vector<NormalizedRect>& rects {cc->Inputs().Get(id).Get<NormalizedRect>()};
 
           for (int i = 0; i < rects.size(); i++) {
             wrapper->add_rects();
@@ -184,7 +185,7 @@ class MyPassThroughCalculator : public CalculatorBase {
   }
 };
 
-REGISTER_CALCULATOR(MyPassThroughCalculator);
+REGISTER_CALCULATOR(MyPassThroughCalculatorSingle);
 
 }
 
