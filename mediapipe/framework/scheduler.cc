@@ -233,22 +233,15 @@ void Scheduler::WaitUntilGraphInputStreamUnthrottled(
   // that point, the sequence number will differ.
   int seq_num;
   {
-    std::cout << "lock" << std::endl;
     absl::MutexLock lock(&state_mutex_);
-    std::cout << "locked" << std::endl;
     seq_num = unthrottle_seq_num_;
   }
-  std::cout << "unlock 2" << std::endl;
   secondary_mutex->Unlock();
-  std::cout << "unlocked 2" << std::endl;
   ApplicationThreadAwait(
       [this, seq_num]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(state_mutex_) {
-        std::cout << "cond " << unthrottle_seq_num_ << "  " << seq_num << std::endl;
         return (unthrottle_seq_num_ != seq_num) || state_ == STATE_TERMINATED;
       });
-  std::cout << "lock 2" << std::endl;
   secondary_mutex->Lock();
-  std::cout << "locked 2" << std::endl;
 }
 
 void Scheduler::EmittedObservedOutput() {

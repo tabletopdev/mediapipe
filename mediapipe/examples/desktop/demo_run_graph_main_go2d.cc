@@ -31,7 +31,7 @@
 #include "mediapipe/gpu/gpu_shared_data_internal.h"
 
 constexpr char kInputStream[] = "input_video";
-constexpr char kOutputStream[] = "output_video";
+constexpr char kOutputStream[] = "hand_landmarks";
 constexpr char kWindowName[] = "MediaPipe";
 
 const std::size_t INIT_BUFFER_SIZE = 1024;
@@ -93,8 +93,8 @@ DEFINE_string(output_video_path, "",
 
   LOG(INFO) << "Start running the calculator graph.";
   // I don't need output video
-  //ASSIGN_OR_RETURN(mediapipe::OutputStreamPoller poller,
-  //                 graph.AddOutputStreamPoller(kOutputStream));
+  ASSIGN_OR_RETURN(mediapipe::OutputStreamPoller poller,
+                   graph.AddOutputStreamPoller(kOutputStream));
   MP_RETURN_IF_ERROR(graph.StartRun({}));
 
   LOG(INFO) << "Start grabbing and processing frames.";
@@ -164,6 +164,14 @@ DEFINE_string(output_video_path, "",
                                     .At(mediapipe::Timestamp(frame_timestamp_us))));
               return ::mediapipe::OkStatus();
             }));
+
+        mediapipe::Packet packet;
+        if (!poller.Next(&packet)) break;
+
+        size_t frame_timestamp_us_after =
+            (double)cv::getTickCount() / (double)cv::getTickFrequency() * 1e6;
+
+        std::cout << frame_timestamp_us_after - frame_timestamp_us << std::endl;
 
         input.clear();
       }

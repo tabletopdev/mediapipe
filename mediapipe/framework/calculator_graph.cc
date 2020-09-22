@@ -811,7 +811,6 @@ template <typename T>
 
     absl::MutexLock lock(&full_input_streams_mutex_);
 
-    std::cout << "size " << full_input_streams_[node_id].size() << std::endl;
     if (graph_input_stream_add_mode_ ==
         GraphInputStreamAddMode::ADD_IF_NOT_FULL) {
       if (has_error_) {
@@ -1048,6 +1047,7 @@ void CalculatorGraph::UpdateThrottledNodes(InputStreamManager* stream,
     bool stream_is_full = stream->IsFull();
     if (*stream_was_full != stream_is_full) {
       for (int node_id : *upstream_nodes) {
+
         VLOG(2) << "Stream \"" << stream->Name() << "\" is "
                 << (stream_is_full ? "throttling" : "no longer throttling")
                 << " node with node ID " << node_id;
@@ -1068,6 +1068,7 @@ void CalculatorGraph::UpdateThrottledNodes(InputStreamManager* stream,
         bool is_throttled = !full_input_streams_[node_id].empty();
         bool is_graph_input_stream =
             node_id >= validated_graph_->CalculatorInfos().size();
+
         if (is_graph_input_stream) {
           // Making these calls while holding full_input_streams_mutex_
           // ensures they are correctly serialized.
