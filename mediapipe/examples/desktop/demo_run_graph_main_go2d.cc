@@ -49,11 +49,13 @@ DEFINE_string(output_video_path, "",
               "If not provided, show result in a window.");
 
 ::mediapipe::Status RunMPPGraph() {
+  std::cout << "Started mediapipe" << std::endl;
+
   std::string calculator_graph_config_contents;
   MP_RETURN_IF_ERROR(mediapipe::file::GetContents(
       FLAGS_calculator_graph_config_file, &calculator_graph_config_contents));
-  LOG(INFO) << "Get calculator graph config contents: "
-            << calculator_graph_config_contents;
+  //LOG(INFO) << "Get calculator graph config contents: "
+  //          << calculator_graph_config_contents;
   mediapipe::CalculatorGraphConfig config =
       mediapipe::ParseTextProtoOrDie<mediapipe::CalculatorGraphConfig>(
           calculator_graph_config_contents);
@@ -107,15 +109,17 @@ DEFINE_string(output_video_path, "",
       std::vector<uint8> input;
 
       while (true) {
+        uint32_t frame_num;
         uint32_t length;
         uint32_t stride;
         uint32_t width;
+        std::fread(&frame_num, sizeof(frame_num), 1, stdin);
         std::fread(&length, sizeof(length), 1, stdin);
         std::fread(&stride, sizeof(stride), 1, stdin);
         std::fread(&width, sizeof(width), 1, stdin);
         uint32_t height = length / stride;
 
-        std::cout << length << " " << stride << " " << width << " " << height << std::endl;
+        std::cout << frame_num << " " << length << " " << stride << " " << width << " " << height << std::endl;
 
         while((len = std::fread(buf.data(), sizeof(buf[0]), std::min(length - input.size(), buf.size()), stdin)) > 0) {
             if(std::ferror(stdin) && !std::feof(stdin)) throw std::runtime_error(std::strerror(errno));
@@ -146,9 +150,9 @@ DEFINE_string(output_video_path, "",
         // Prepare and add graph input packet.
         size_t frame_timestamp_us =
             (double)cv::getTickCount() / (double)cv::getTickFrequency() * 1e6;
+
         MP_RETURN_IF_ERROR(
-            gpu_helper.RunInGlContext([&input_frame, &frame_timestamp_us, &graph,
-                                       &gpu_helper]() -> ::mediapipe::Status {
+            gpu_helper.RunInGlContext([&input_frame, &frame_timestamp_us, &graph, &gpu_helper, &frame_num]() -> ::mediapipe::Status {
               // Convert ImageFrame to GpuBuffer.
               auto texture = gpu_helper.CreateSourceTexture(*input_frame.get());
               auto gpu_frame = texture.GetFrame<mediapipe::GpuBuffer>();

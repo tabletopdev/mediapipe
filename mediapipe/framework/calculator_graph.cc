@@ -808,7 +808,10 @@ template <typename T>
       ::mediapipe::FindOrDie(graph_input_stream_node_ids_, stream_name);
   CHECK_GE(node_id, validated_graph_->CalculatorInfos().size());
   {
+
     absl::MutexLock lock(&full_input_streams_mutex_);
+
+    std::cout << "size " << full_input_streams_[node_id].size() << std::endl;
     if (graph_input_stream_add_mode_ ==
         GraphInputStreamAddMode::ADD_IF_NOT_FULL) {
       if (has_error_) {
