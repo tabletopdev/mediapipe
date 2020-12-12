@@ -95,12 +95,12 @@ DEFINE_string(output_video_path, "",
 
         // Wrap Mat into an ImageFrame.
         auto input_frame = absl::make_unique<mediapipe::ImageFrame>(
-            mediapipe::ImageFormat::SRGB, width, height,
+            mediapipe::ImageFormat::SRGBA, width, height,
             mediapipe::ImageFrame::kGlDefaultAlignmentBoundary);
 
         input_frame.get()->CopyPixelData(
-            mediapipe::ImageFormat::SRGB,
-            stride / 3, // width with padding
+            mediapipe::ImageFormat::SRGBA,
+            stride / 4, // width with padding
             height,
             //width, // width step
             input.data(),
@@ -130,6 +130,7 @@ DEFINE_string(output_video_path, "",
 
         mediapipe::Packet packet;
         if (!poller.Next(&packet)) break;
+        std::cout << "PKT SIZE " << packet.GetProtoMessageLite().ByteSize() << std::endl;
 
         size_t frame_timestamp_us_after =
             (double)cv::getTickCount() / (double)cv::getTickFrequency() * 1e6;
