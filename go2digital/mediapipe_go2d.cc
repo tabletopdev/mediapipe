@@ -14,25 +14,51 @@
 #include "mediapipe/gpu/gpu_buffer.h"
 #include "mediapipe/gpu/gpu_shared_data_internal.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+#define PORT 8080
+
+int sockfd;
+struct sockaddr_in     servaddr;
+
+
 constexpr char kInputStream[] = "input_video";
-constexpr char kOutputStream[] = "pose_landmarks_smoothed";
+constexpr char presenceOutputStream[] = "presence";
 
 const std::size_t INIT_BUFFER_SIZE = 1024;
 
+void setup_udp(){
+  // Creating socket file descriptor
+  if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
+      perror("socket creation failed");
+      exit(EXIT_FAILURE);
+  }
 
+  memset(&servaddr, 0, sizeof(servaddr));
+
+  // Filling server information
+  servaddr.sin_family = AF_INET;
+  servaddr.sin_port = htons(PORT);
+  servaddr.sin_addr.s_addr = INADDR_ANY;
+}
 
 DEFINE_string(
     calculator_graph_config_file, "",
     "Name of file containing text format CalculatorGraphConfig proto.");
-DEFINE_string(input_video_path, "",
-              "Full path of video to load. "
-              "If not provided, attempt to use a webcam.");
-DEFINE_string(output_video_path, "",
-              "Full path of where to save result (.mp4 only). "
-              "If not provided, show result in a window.");
+DEFINE_string(output_stream, "",
+              "Which output stream to poll.");
 
 ::mediapipe::Status RunMPPGraph() {
   std::cout << "Started mediapipe" << std::endl;
+
+  setup_udp();
 
   std::string calculator_graph_config_contents;
   MP_RETURN_IF_ERROR(mediapipe::file::GetContents(
@@ -56,7 +82,10 @@ DEFINE_string(output_video_path, "",
   LOG(INFO) << "Start running the calculator graph.";
 
   ASSIGN_OR_RETURN(mediapipe::OutputStreamPoller poller,
-                   graph.AddOutputStreamPoller(kOutputStream));
+                   graph.AddOutputStreamPoller(FLAGS_output_stream));
+
+  ASSIGN_OR_RETURN(mediapipe::OutputStreamPoller presence_poller,
+                   graph.AddOutputStreamPoller(presenceOutputStream));
 
   MP_RETURN_IF_ERROR(graph.StartRun({}));
 
@@ -128,9 +157,28 @@ DEFINE_string(output_video_path, "",
               return ::mediapipe::OkStatus();
             }));
 
-        mediapipe::Packet packet;
-        if (!poller.Next(&packet)) break;
-        std::cout << "PKT SIZE " << packet.GetProtoMessageLite().ByteSize() << std::endl;
+        mediapipe::Packet presence_packet;
+        if (!presence_poller.Next(&presence_packet)) break;
+        bool packet_present = presence_packet.Get<bool>();
+
+        if (packet_present) {
+            mediapipe::Packet packet;
+            if (!poller.Next(&packet)) break;
+
+            std::cout << "PKT SIZE " << packet.GetProtoMessageLite().ByteSize() << std::endl;
+            std::string msg_buffer;
+            packet.GetProtoMessageLite().SerializeToString(&msg_buffer);
+            if (msg_buffer.length() > 0) {
+            sendto(sockfd, msg_buffer.c_str(), msg_buffer.length(),
+                0, (const struct sockaddr *) &servaddr,
+                    sizeof(servaddr));
+            }
+        } else {
+            unsigned char no_detection[1]={0x00};
+            sendto(sockfd, no_detection, 1,
+                0, (const struct sockaddr *) &servaddr,
+                    sizeof(servaddr));
+        }
 
         size_t frame_timestamp_us_after =
             (double)cv::getTickCount() / (double)cv::getTickFrequency() * 1e6;
