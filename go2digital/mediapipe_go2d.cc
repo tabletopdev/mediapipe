@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <iostream>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -33,6 +34,15 @@ constexpr char kInputStream[] = "input_video";
 constexpr char presenceOutputStream[] = "presence";
 
 const std::size_t INIT_BUFFER_SIZE = 1024;
+
+void write_to_header(char* array, uint32_t value, int position) {
+    char* ptr = array;
+    ptr = ptr + position;
+    *(ptr + 0) = (value >> 0) & 0xFF;
+    *(ptr + 1) = (value >> 8) & 0xFF;
+    *(ptr + 2) = (value >> 16) & 0xFF;
+    *(ptr + 3) = (value >> 24) & 0xFF; 
+}
 
 void setup_udp(){
   // Creating socket file descriptor
@@ -105,10 +115,14 @@ DEFINE_string(output_stream, "",
         uint32_t length;
         uint32_t stride;
         uint32_t width;
+        uint32_t top;
+        uint32_t left;
         std::fread(&frame_num, sizeof(frame_num), 1, stdin);
         std::fread(&length, sizeof(length), 1, stdin);
         std::fread(&stride, sizeof(stride), 1, stdin);
         std::fread(&width, sizeof(width), 1, stdin);
+        std::fread(&top, sizeof(top), 1, stdin);
+        std::fread(&left, sizeof(left), 1, stdin);
         uint32_t height = length / stride;
 
         std::cout << frame_num << " " << length << " " << stride << " " << width << " " << height << std::endl;
@@ -164,12 +178,18 @@ DEFINE_string(output_stream, "",
         if (packet_present) {
             mediapipe::Packet packet;
             if (!poller.Next(&packet)) break;
-
-            std::cout << "PKT SIZE " << packet.GetProtoMessageLite().ByteSize() << std::endl;
-            std::string msg_buffer;
-            packet.GetProtoMessageLite().SerializeToString(&msg_buffer);
-            if (msg_buffer.length() > 0) {
-            sendto(sockfd, msg_buffer.c_str(), msg_buffer.length(),
+            int packet_size = packet.GetProtoMessageLite().ByteSize();
+            int header_size = 5*4;
+            std::cout << "PKT SIZE " << packet_size << std::endl;
+            char* array = new char[packet_size + header_size];
+            write_to_header(array, frame_num, 0);
+            write_to_header(array, top, 4);
+            write_to_header(array, left, 8);
+            write_to_header(array, width, 12);
+            write_to_header(array, height, 16);
+            packet.GetProtoMessageLite().SerializeToArray(array + header_size, packet_size);
+            if (packet_size > 0) {
+            sendto(sockfd, array, packet_size + header_size,
                 0, (const struct sockaddr *) &servaddr,
                     sizeof(servaddr));
             }
