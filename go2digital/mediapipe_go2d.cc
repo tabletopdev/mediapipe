@@ -1,6 +1,7 @@
 #include <cstdlib>
 
 #include "mediapipe/framework/calculator_framework.h"
+#include "mediapipe/framework/formats/landmark.pb.h"
 #include "mediapipe/framework/formats/image_frame.h"
 #include "mediapipe/framework/formats/image_frame_opencv.h"
 #include "mediapipe/framework/port/commandlineflags.h"
@@ -178,20 +179,28 @@ DEFINE_string(output_stream, "",
         if (packet_present) {
             mediapipe::Packet packet;
             if (!poller.Next(&packet)) break;
-            int packet_size = packet.GetProtoMessageLite().ByteSize();
-            int header_size = 5*4;
-            std::cout << "PKT SIZE " << packet_size << std::endl;
-            char* array = new char[packet_size + header_size];
-            write_to_header(array, frame_num, 0);
-            write_to_header(array, top, 4);
-            write_to_header(array, left, 8);
-            write_to_header(array, width, 12);
-            write_to_header(array, height, 16);
-            packet.GetProtoMessageLite().SerializeToArray(array + header_size, packet_size);
-            if (packet_size > 0) {
-            sendto(sockfd, array, packet_size + header_size,
-                0, (const struct sockaddr *) &servaddr,
-                    sizeof(servaddr));
+            // TODO on the fly based on model used change runtime behaviour
+            // different models use different types of messages
+            //
+            // packet.GetProtoMessageLite().getByteSize();
+            auto& output_landmarks = packet.Get<std::vector<::mediapipe::NormalizedLandmarkList>>();
+            for (const ::mediapipe::NormalizedLandmarkList& landmark : output_landmarks) {
+                int packet_size = landmark.ByteSize();
+                int header_size = 5*4;
+                std::cout << "PKT SIZE " << packet_size << std::endl;
+                char* array = new char[packet_size + header_size];
+                write_to_header(array, frame_num, 0);
+                write_to_header(array, top, 4);
+                write_to_header(array, left, 8);
+                write_to_header(array, width, 12);
+                write_to_header(array, height, 16);
+                landmark.SerializeToArray(array + header_size, packet_size);
+                if (packet_size > 0) {
+                sendto(sockfd, array, packet_size + header_size,
+                    0, (const struct sockaddr *) &servaddr,
+                        sizeof(servaddr));
+                }
+                break;
             }
         } else {
             unsigned char no_detection[1]={0x00};

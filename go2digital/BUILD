@@ -22,6 +22,7 @@ cc_binary(
     deps = [
         ":mediapipe_go2d",
         "//mediapipe/graphs/pose_tracking:upper_body_pose_tracking_gpu_deps",
+        "//mediapipe/graphs/face_mesh:desktop_live_gpu_calculators",
     ],
 )
 
@@ -30,6 +31,7 @@ cc_library(
     srcs = ["mediapipe_go2d.cc"],
     deps = [
         "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/formats:landmark_cc_proto",
         "//mediapipe/framework/formats:image_frame",
         "//mediapipe/framework/formats:image_frame_opencv",
         "//mediapipe/framework/port:commandlineflags",
