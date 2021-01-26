@@ -45,6 +45,39 @@ void write_to_header(char* array, uint32_t value, int position) {
     *(ptr + 3) = (value >> 24) & 0xFF; 
 }
 
+void send_message_over_udp(
+    const mediapipe::proto_ns::MessageLite* message,
+    uint32_t frame_num,
+    uint32_t top,
+    uint32_t left,
+    uint32_t width,
+    uint32_t height)
+{
+    int packet_size = message->ByteSize();
+    int header_size = 5*4;
+    std::cout << "PKT SIZE " << packet_size << std::endl;
+    char* array = new char[packet_size + header_size];
+    write_to_header(array, frame_num, 0);
+    write_to_header(array, top, 4);
+    write_to_header(array, left, 8);
+    write_to_header(array, width, 12);
+    write_to_header(array, height, 16);
+    message->SerializeToArray(array + header_size, packet_size);
+    if (packet_size > 0) {
+    sendto(sockfd, array, packet_size + header_size,
+        0, (const struct sockaddr *) &servaddr,
+            sizeof(servaddr));
+    }
+}
+
+
+void send_no_detection() {
+    unsigned char no_detection[1]={0x00};
+    sendto(sockfd, no_detection, 1,
+        0, (const struct sockaddr *) &servaddr,
+            sizeof(servaddr));
+}
+
 void setup_udp(){
   // Creating socket file descriptor
   if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
@@ -179,34 +212,21 @@ DEFINE_string(output_stream, "",
         if (packet_present) {
             mediapipe::Packet packet;
             if (!poller.Next(&packet)) break;
-            // TODO on the fly based on model used change runtime behaviour
-            // different models use different types of messages
-            //
-            // packet.GetProtoMessageLite().getByteSize();
-            auto& output_landmarks = packet.Get<std::vector<::mediapipe::NormalizedLandmarkList>>();
-            for (const ::mediapipe::NormalizedLandmarkList& landmark : output_landmarks) {
-                int packet_size = landmark.ByteSize();
-                int header_size = 5*4;
-                std::cout << "PKT SIZE " << packet_size << std::endl;
-                char* array = new char[packet_size + header_size];
-                write_to_header(array, frame_num, 0);
-                write_to_header(array, top, 4);
-                write_to_header(array, left, 8);
-                write_to_header(array, width, 12);
-                write_to_header(array, height, 16);
-                landmark.SerializeToArray(array + header_size, packet_size);
-                if (packet_size > 0) {
-                sendto(sockfd, array, packet_size + header_size,
-                    0, (const struct sockaddr *) &servaddr,
-                        sizeof(servaddr));
+            auto status_one = packet.ValidateAsProtoMessageLite();
+            if (status_one.ok()) {
+                auto& landmark = packet.GetProtoMessageLite();
+                send_message_over_udp(&landmark, frame_num, top, left, width, height);
+            }
+            auto status_vec = packet.GetVectorOfProtoMessageLitePtrs();
+            if (status_vec.ok()) {
+                auto output_landmarks = status_vec.ValueOrDie();
+                for (auto landmark : output_landmarks) {
+                    send_message_over_udp(landmark, frame_num, top, left, width, height);
+                    break;
                 }
-                break;
             }
         } else {
-            unsigned char no_detection[1]={0x00};
-            sendto(sockfd, no_detection, 1,
-                0, (const struct sockaddr *) &servaddr,
-                    sizeof(servaddr));
+            send_no_detection();
         }
 
         size_t frame_timestamp_us_after =
