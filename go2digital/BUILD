@@ -23,6 +23,7 @@ cc_binary(
         ":mediapipe_go2d",
         "//mediapipe/graphs/pose_tracking:upper_body_pose_tracking_gpu_deps",
         "//mediapipe/graphs/face_mesh:desktop_live_gpu_calculators",
+        "//mediapipe/graphs/hand_tracking:mobile_calculators",
     ],
 )
 
