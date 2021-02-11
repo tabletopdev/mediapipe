@@ -222,7 +222,6 @@ DEFINE_string(output_stream, "",
                 auto output_landmarks = status_vec.ValueOrDie();
                 for (auto landmark : output_landmarks) {
                     send_message_over_udp(landmark, frame_num, top, left, width, height);
-                    break;
                 }
             }
         } else {
