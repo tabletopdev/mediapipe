@@ -25,19 +25,18 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#define PORT 8080
+#define PORT 40405
 
 int sockfd;
 struct sockaddr_in     servaddr;
-
 
 constexpr char kInputStream[] = "input_video";
 constexpr char presenceOutputStream[] = "presence";
 
 const std::size_t INIT_BUFFER_SIZE = 1024;
 
-void write_to_header(char* array, uint32_t value, int position) {
-    char* ptr = array;
+void write_to_header(uint8* array, uint32_t value, int position) {
+    uint8* ptr = array;
     ptr = ptr + position;
     *(ptr + 0) = (value >> 0) & 0xFF;
     *(ptr + 1) = (value >> 8) & 0xFF;
@@ -45,42 +44,28 @@ void write_to_header(char* array, uint32_t value, int position) {
     *(ptr + 3) = (value >> 24) & 0xFF; 
 }
 
-void send_message_over_udp(
-    const mediapipe::proto_ns::MessageLite* message,
+void send_message_over_tcp(
+    uint8* buffer,
+    int total_buffer_size,
     uint32_t frame_num,
     uint32_t top,
     uint32_t left,
     uint32_t width,
     uint32_t height)
 {
-    int packet_size = message->ByteSize();
-    int header_size = 5*4;
-    std::cout << "PKT SIZE " << packet_size << std::endl;
-    char* array = new char[packet_size + header_size];
-    write_to_header(array, frame_num, 0);
-    write_to_header(array, top, 4);
-    write_to_header(array, left, 8);
-    write_to_header(array, width, 12);
-    write_to_header(array, height, 16);
-    message->SerializeToArray(array + header_size, packet_size);
-    if (packet_size > 0) {
-    sendto(sockfd, array, packet_size + header_size,
-        0, (const struct sockaddr *) &servaddr,
-            sizeof(servaddr));
-    }
+    write_to_header(buffer, (uint32_t)total_buffer_size - 4, 0);
+    //write_to_header(array, 0, 4);
+    //write_to_header(array, top, 4);
+    //write_to_header(array, left, 8);
+    //write_to_header(array, width, 12);
+    //write_to_header(array, height, 16);
+    //message->SerializeToArray(array + header_size, packet_size);
+    send(sockfd, buffer, total_buffer_size, 0);
 }
 
-
-void send_no_detection() {
-    unsigned char no_detection[1]={0x00};
-    sendto(sockfd, no_detection, 1,
-        0, (const struct sockaddr *) &servaddr,
-            sizeof(servaddr));
-}
-
-void setup_udp(){
+void setup_tcp(){
   // Creating socket file descriptor
-  if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
+  if ( (sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0 ) {
       perror("socket creation failed");
       exit(EXIT_FAILURE);
   }
@@ -90,7 +75,16 @@ void setup_udp(){
   // Filling server information
   servaddr.sin_family = AF_INET;
   servaddr.sin_port = htons(PORT);
-  servaddr.sin_addr.s_addr = INADDR_ANY;
+
+  if (inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr)<=0) {
+      perror("Invalid address");
+      exit(EXIT_FAILURE);
+  }
+ 
+  if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+      perror("socket connect failed");
+      exit(EXIT_FAILURE);
+  }
 }
 
 DEFINE_string(
@@ -102,7 +96,7 @@ DEFINE_string(output_stream, "",
 ::mediapipe::Status RunMPPGraph() {
   std::cout << "Started mediapipe" << std::endl;
 
-  setup_udp();
+  setup_tcp();
 
   std::string calculator_graph_config_contents;
   MP_RETURN_IF_ERROR(mediapipe::file::GetContents(
@@ -128,8 +122,8 @@ DEFINE_string(output_stream, "",
   ASSIGN_OR_RETURN(mediapipe::OutputStreamPoller poller,
                    graph.AddOutputStreamPoller(FLAGS_output_stream));
 
-  ASSIGN_OR_RETURN(mediapipe::OutputStreamPoller presence_poller,
-                   graph.AddOutputStreamPoller(presenceOutputStream));
+  //ASSIGN_OR_RETURN(mediapipe::OutputStreamPoller presence_poller,
+  //                 graph.AddOutputStreamPoller(presenceOutputStream));
 
   MP_RETURN_IF_ERROR(graph.StartRun({}));
 
@@ -199,34 +193,45 @@ DEFINE_string(output_stream, "",
               glFlush();
               texture.Release();
               // Send GPU image packet into the graph.
+            // Send GPU image packet into the graph.
+              auto packet = mediapipe::MakePacket<bool>(false).At(mediapipe::Timestamp(frame_timestamp_us));
+              MP_RETURN_IF_ERROR(graph.AddPacketToInputStream("is_facepaint_effect_selected", packet));
               MP_RETURN_IF_ERROR(graph.AddPacketToInputStream(
                   kInputStream, mediapipe::Adopt(gpu_frame.release())
                                     .At(mediapipe::Timestamp(frame_timestamp_us))));
               return ::mediapipe::OkStatus();
             }));
 
-        mediapipe::Packet presence_packet;
-        if (!presence_poller.Next(&presence_packet)) break;
-        bool packet_present = presence_packet.Get<bool>();
+        mediapipe::Packet packet;
 
-        if (packet_present) {
-            mediapipe::Packet packet;
-            if (!poller.Next(&packet)) break;
-            auto status_one = packet.ValidateAsProtoMessageLite();
-            if (status_one.ok()) {
-                auto& landmark = packet.GetProtoMessageLite();
-                send_message_over_udp(&landmark, frame_num, top, left, width, height);
-            }
-            auto status_vec = packet.GetVectorOfProtoMessageLitePtrs();
-            if (status_vec.ok()) {
-                auto output_landmarks = status_vec.ValueOrDie();
-                for (auto landmark : output_landmarks) {
-                    send_message_over_udp(landmark, frame_num, top, left, width, height);
-                }
-            }
-        } else {
-            send_no_detection();
-        }
+        if (!poller.Next(&packet)) break;
+
+        std::unique_ptr<mediapipe::ImageFrame> output_frame;
+
+        // Convert GpuBuffer to ImageFrame.
+        MP_RETURN_IF_ERROR(gpu_helper.RunInGlContext(
+            [&packet, &output_frame, &gpu_helper]() -> ::mediapipe::Status {
+            auto& gpu_frame = packet.Get<mediapipe::GpuBuffer>();
+            auto texture = gpu_helper.CreateSourceTexture(gpu_frame);
+            output_frame = absl::make_unique<mediapipe::ImageFrame>(
+                mediapipe::ImageFormatForGpuBufferFormat(gpu_frame.format()),
+                gpu_frame.width(), gpu_frame.height(),
+                mediapipe::ImageFrame::kGlDefaultAlignmentBoundary);
+            gpu_helper.BindFramebuffer(texture);
+            const auto info =
+                mediapipe::GlTextureInfoForGpuBufferFormat(gpu_frame.format(), 0);
+            glReadPixels(0, 0, texture.width(), texture.height(), info.gl_format,
+                        info.gl_type, output_frame->MutablePixelData());
+            glFlush();
+            texture.Release();
+            return mediapipe::OkStatus();
+            }));
+
+        //LOG(INFO) << "IMAGE" << output_frame->Width() << "x" << output_frame->Height() << " / " << output_frame->PixelDataSize();
+        auto total_size = output_frame->PixelDataSize() + 4;
+        uint8* array = (uint8*)(new char[total_size]);
+        output_frame->CopyToBuffer(array + 4, output_frame->PixelDataSize());
+        send_message_over_tcp(array, total_size, frame_num, top, left, width, height);
 
         size_t frame_timestamp_us_after =
             (double)cv::getTickCount() / (double)cv::getTickFrequency() * 1e6;

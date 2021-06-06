@@ -19,6 +19,13 @@ output_stream: "output_video"
 #
 # (std::vector<face_geometry::FaceGeometry>)
 output_stream: "multi_face_geometry"
+output_stream: "presence"
+
+node: {
+   calculator: "PacketPresenceCalculator"
+   input_stream: "PACKET:multi_face_geometry"
+   output_stream: "PRESENCE:presence"
+}
 
 # Throttles the images flowing downstream for flow control. It passes through
 # the very first incoming image unaltered, and waits for downstream nodes

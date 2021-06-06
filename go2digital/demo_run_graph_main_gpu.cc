@@ -117,6 +117,8 @@ mediapipe::Status RunMPPGraph() {
     cv::Mat input_frame_mat = mediapipe::formats::MatView(input_frame.get());
     camera_frame.copyTo(input_frame_mat);
 
+    LOG(INFO) << "Copy frame";
+
     // Prepare and add graph input packet.
     size_t frame_timestamp_us =
         (double)cv::getTickCount() / (double)cv::getTickFrequency() * 1e6;
@@ -129,6 +131,8 @@ mediapipe::Status RunMPPGraph() {
           glFlush();
           texture.Release();
           // Send GPU image packet into the graph.
+          auto packet = mediapipe::MakePacket<bool>(false).At(mediapipe::Timestamp::PreStream());
+          graph.AddPacketToInputStream("is_facepaint_effect_selected", packet);
           MP_RETURN_IF_ERROR(graph.AddPacketToInputStream(
               kInputStream, mediapipe::Adopt(gpu_frame.release())
                                 .At(mediapipe::Timestamp(frame_timestamp_us))));
