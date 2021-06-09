@@ -153,8 +153,6 @@ DEFINE_string(output_stream, "",
         std::fread(&left, sizeof(left), 1, stdin);
         uint32_t height = length / stride;
 
-        std::cout << frame_num << " " << length << " " << stride << " " << width << " " << height << std::endl;
-
         while((len = std::fread(buf.data(), sizeof(buf[0]), std::min(length - input.size(), buf.size()), stdin)) > 0) {
             if(std::ferror(stdin) && !std::feof(stdin)) throw std::runtime_error(std::strerror(errno));
             input.insert(input.end(), buf.data(), buf.data() + len);
@@ -194,7 +192,7 @@ DEFINE_string(output_stream, "",
               texture.Release();
               // Send GPU image packet into the graph.
             // Send GPU image packet into the graph.
-              auto packet = mediapipe::MakePacket<bool>(false).At(mediapipe::Timestamp(frame_timestamp_us));
+              auto packet = mediapipe::MakePacket<bool>(true).At(mediapipe::Timestamp(frame_timestamp_us));
               MP_RETURN_IF_ERROR(graph.AddPacketToInputStream("is_facepaint_effect_selected", packet));
               MP_RETURN_IF_ERROR(graph.AddPacketToInputStream(
                   kInputStream, mediapipe::Adopt(gpu_frame.release())
@@ -236,12 +234,12 @@ DEFINE_string(output_stream, "",
         size_t frame_timestamp_us_after =
             (double)cv::getTickCount() / (double)cv::getTickFrequency() * 1e6;
 
-        std::cout << frame_timestamp_us_after - frame_timestamp_us << std::endl;
+        //std::cout << frame_timestamp_us_after - frame_timestamp_us << std::endl;
 
         input.clear();
       }
   } catch(std::exception const& e) {
-      std::cerr << e.what() << '\n';
+      LOG(ERROR) << e.what() << '\n';
       exit(EXIT_FAILURE);
   }
 
