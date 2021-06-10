@@ -230,6 +230,7 @@ DEFINE_string(output_stream, "",
         uint8* array = (uint8*)(new char[total_size]);
         output_frame->CopyToBuffer(array + 4, output_frame->PixelDataSize());
         send_message_over_tcp(array, total_size, frame_num, top, left, width, height);
+        delete array;
 
         size_t frame_timestamp_us_after =
             (double)cv::getTickCount() / (double)cv::getTickFrequency() * 1e6;
